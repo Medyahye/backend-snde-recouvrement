@@ -32,9 +32,7 @@ Ces elements sont fournis separement :
 - dump PostgreSQL complet : `snde_full_backup.dump`
 - secrets AWS
 - credentials serveur
-- fichiers Apple/TestFlight
-- frontend web
-- application mobile
+
 
 Ne jamais commiter `.env`, dumps, cles ou secrets.
 
