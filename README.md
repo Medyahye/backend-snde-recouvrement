@@ -228,15 +228,24 @@ Nettoyer le dump temporaire dans le conteneur :
 docker exec snde-postgres rm -f /tmp/snde_full_backup.dump
 ```
 
-## Alternative Sans Dump : Reconstruire Depuis S3
+## Donnees Initiales
 
-Si DevOps ne veut pas restaurer le dump complet, il faut configurer AWS S3 dans `.env`, puis lancer :
+Pour cette livraison, la base doit etre initialisee avec le dump complet fourni :
 
-```bash
-docker exec snde-backend python manage.py s3_backfill
+```text
+snde_full_backup.dump
 ```
 
-Cette option reconstruit les imports depuis S3. Elle peut prendre du temps selon le volume historique.
+Ce dump contient les donnees deja preparees pour la demonstration et l'exploitation :
+
+- imports FAB deja traites
+- clients
+- scores
+- probabilites IA
+- releveurs/utilisateurs
+- affectations terrain
+
+La reconstruction historique depuis S3 n'est pas la procedure de livraison recommandee, car elle peut prendre beaucoup de temps. S3 reste utilise ensuite pour les nouveaux FAB via la synchronisation automatique quotidienne.
 
 ## Migrations
 
@@ -335,7 +344,7 @@ Sans URL publique accessible depuis Internet, l'app TestFlight ne pourra pas fon
 2. Creer `.env` depuis `.env.example`.
 3. Renseigner secrets Django/Postgres/Redis/MinIO/AWS.
 4. Lancer `docker compose up -d --build`.
-5. Restaurer `snde_full_backup.dump` ou reconstruire depuis S3.
+5. Restaurer `snde_full_backup.dump`.
 6. Verifier `docker compose ps`.
 7. Verifier `python manage.py check`.
 8. Verifier les counts PostgreSQL (`clients`, `fab_imports`, `terrain_assignments`).
