@@ -24,7 +24,7 @@ https://github.com/Medyahye/backend-snde-recouvrement.git
 - affectations mobile terrain
 - retours terrain avec photo + GPS
 
-## A Ne Pas Chercher Dans Git
+## A donner separement
 
 Ces elements sont fournis separement :
 
