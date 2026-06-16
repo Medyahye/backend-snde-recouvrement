@@ -1,4 +1,4 @@
-# SNDE Recouvrement - Backend DevOps
+# SNDE Recouvrement - Backend 
 
 Backend Django/DRF du systeme SNDE Recouvrement.
 
