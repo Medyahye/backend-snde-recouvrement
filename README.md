@@ -322,19 +322,7 @@ Verifier la base :
 docker exec snde-postgres psql -U snde -d snde -c "select pg_size_pretty(pg_database_size('snde'));"
 ```
 
-## Mobile / TestFlight
 
-Une fois le backend deploye, fournir a l'equipe mobile l'URL publique API :
-
-```text
-https://DOMAIN/api
-```
-
-Cette URL sera mise dans `mobile/app.json` :
-
-```json
-"apiUrl": "https://DOMAIN/api"
-```
 
 Sans URL publique accessible depuis Internet, l'app TestFlight ne pourra pas fonctionner depuis la maison du directeur.
 
@@ -348,15 +336,8 @@ Sans URL publique accessible depuis Internet, l'app TestFlight ne pourra pas fon
 6. Verifier `docker compose ps`.
 7. Verifier `python manage.py check`.
 8. Verifier les counts PostgreSQL (`clients`, `fab_imports`, `terrain_assignments`).
-9. Exposer le backend en HTTPS.
-10. Donner l'URL finale `/api` a l'equipe mobile.
 
-## Points De Securite
 
-- Ne pas pousser `.env`.
-- Ne pas pousser `snde_full_backup.dump`.
-- Ne pas exposer PostgreSQL publiquement sauf necessite et restrictions IP.
-- Mettre `DJANGO_DEBUG=0` en production.
-- Utiliser HTTPS devant le backend.
+
 - Utiliser des credentials AWS read-only pour la source FAB.
 - Sauvegarder PostgreSQL en production.
