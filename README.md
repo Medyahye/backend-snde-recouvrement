@@ -1,42 +1,88 @@
-# SNDE Recouvrement - Backend
+# SNDE Recouvrement - Backend DevOps
 
-Backend Django/DRF du systeme de recouvrement SNDE.
+Backend Django/DRF du systeme SNDE Recouvrement.
 
-Le depot contient uniquement la partie backend livrable :
+Ce depot est la livraison backend uniquement. Il contient le code serveur, les migrations, Docker Compose, Celery, la synchronisation AWS S3 et le modele IA.
+
+Repo :
+
+```text
+https://github.com/Medyahye/backend-snde-recouvrement.git
+```
+
+## Contenu
 
 - API Django REST + JWT
-- import et parsing des FAB
-- scoring metier et scoring IA FT-Transformer
+- PostgreSQL
+- Redis
+- Celery worker et Celery Beat
+- MinIO pour FAB/photos terrain
+- import et traitement des FAB
 - synchronisation AWS S3 vers MinIO
-- traitements asynchrones Celery
-- affectations terrain mobile
-- preuves de passage terrain avec photo/GPS
+- scoring metier
+- scoring IA FT-Transformer
+- affectations mobile terrain
+- retours terrain avec photo + GPS
 
-## Architecture
+## A Ne Pas Chercher Dans Git
 
-Services Docker :
+Ces elements sont fournis separement :
 
-- `backend` : API Django exposee sur `:8000`
-- `postgres` : base PostgreSQL avec image `pgvector/pgvector:pg16`
+- vrai `.env`
+- dump PostgreSQL complet : `snde_full_backup.dump`
+- secrets AWS
+- credentials serveur
+- fichiers Apple/TestFlight
+- frontend web
+- application mobile
+
+Ne jamais commiter `.env`, dumps, cles ou secrets.
+
+## Architecture Docker
+
+Services :
+
+- `backend` : Django + Gunicorn sur port `8000`
+- `postgres` : PostgreSQL `pgvector/pgvector:pg16`
 - `redis` : broker/result backend Celery
-- `minio` : stockage local des FAB et photos compteur
-- `celery_worker` : execution des imports, scoring, sync S3
-- `celery_beat` : planification quotidienne de la sync S3
+- `minio` : stockage objet local des FAB/photos
+- `minio-init` : creation des buckets MinIO
+- `celery_worker` : execution imports/scoring/sync
+- `celery_beat` : planification de la sync S3 quotidienne
 
-## Prerequis
+Ports exposes par defaut :
+
+```text
+8000  backend API
+5432  PostgreSQL
+6379  Redis
+9000  MinIO API
+9001  MinIO console
+```
+
+## Installation Serveur
+
+Prerequis :
 
 - Docker
 - Docker Compose v2
-- Acces aux secrets `.env` fournis hors Git
-- Credentials AWS S3 read-only si la synchronisation automatique est active
+- acces au repo GitHub
+- fichier `.env` reel fourni hors Git
 
-## Installation locale
+Clone :
+
+```bash
+git clone https://github.com/Medyahye/backend-snde-recouvrement.git
+cd backend-snde-recouvrement
+```
+
+Creer `.env` :
 
 ```bash
 cp .env.example .env
 ```
 
-Modifier ensuite `.env` avec les vraies valeurs.
+Modifier `.env` avec les vraies valeurs.
 
 Demarrer :
 
@@ -51,111 +97,257 @@ docker compose ps
 docker logs snde-backend --tail 100
 ```
 
-Appliquer les migrations manuellement si besoin :
+## Variables .env A Renseigner
 
-```bash
-docker exec snde-backend python manage.py migrate
+### Django
+
+```env
+DJANGO_SECRET_KEY=...
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=api-domain.example.com,localhost,127.0.0.1,backend
+DJANGO_SUPERUSER_EMAIL=admin@snde.local
+DJANGO_SUPERUSER_PASSWORD=...
 ```
 
-Creer le compte admin par defaut :
+En production, mettre `DJANGO_DEBUG=0`.
 
-```bash
-docker exec snde-backend python manage.py create_default_admin
+### PostgreSQL
+
+```env
+POSTGRES_DB=snde
+POSTGRES_USER=snde
+POSTGRES_PASSWORD=...
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
 ```
 
-## Variables d'environnement
+Si la base est RDS/AWS externe, remplacer `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, etc.
 
-Les variables attendues sont documentees dans `.env.example`.
+### Redis / Celery
 
-Principales sections :
-
-- Django : `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`
-- PostgreSQL : `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-- Celery/Redis : `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
-- MinIO : `MINIO_ENDPOINT`, `MINIO_BUCKET_FAB`, `MINIO_BUCKET_PHOTOS`
-- AWS S3 : `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`
-- Scoring : `SCORING_ENGINE=formula` ou `SCORING_ENGINE=ft_transformer`
-
-Ne jamais commiter le vrai `.env`.
-
-## IA / Scoring
-
-Le modele IA livre est :
-
-```text
-backend/gnn_models/ft_transformer_snde.pt
+```env
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/1
+CELERY_RESULT_BACKEND=redis://redis:6379/2
 ```
 
-Pour utiliser le score IA :
+Si Redis est externe, remplacer l'host.
+
+### MinIO / Stockage Objet
+
+```env
+MINIO_ROOT_USER=...
+MINIO_ROOT_PASSWORD=...
+MINIO_ENDPOINT=minio:9000
+MINIO_PUBLIC_ENDPOINT=https://minio-or-public-host.example.com
+MINIO_ACCESS_KEY=...
+MINIO_SECRET_KEY=...
+MINIO_BUCKET_FAB=fab-imports
+MINIO_BUCKET_PHOTOS=meter-photos
+MINIO_USE_SSL=0
+```
+
+`MINIO_PUBLIC_ENDPOINT` doit etre accessible par le mobile si les photos terrain doivent s'afficher.
+
+### AWS S3 Source FAB
+
+```env
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET=snde-facture
+AWS_S3_REGION=eu-west-1
+AWS_S3_PREFIX=Solde/
+FAB_EMPTY_MIN_VALID_LINES=100
+```
+
+Ces credentials doivent etre read-only sur S3.
+
+### Scoring IA
 
 ```env
 SCORING_ENGINE=ft_transformer
 ```
 
-Pour revenir au score metier manuel :
+Pour utiliser le score metier classique :
 
 ```env
 SCORING_ENGINE=formula
 ```
 
-Le backend expose les champs `proba_paiement` et `score_final` aux interfaces web/mobile.
+## Modele IA
 
-## Sync AWS S3
+Le modele IA est inclus dans le repo :
 
-Le systeme lit les FAB depuis le bucket AWS S3 configure, puis les copie dans MinIO avant traitement.
-
-La tache planifiee tourne tous les jours a 02:00 heure `Africa/Nouakchott` via Celery Beat.
-
-Declenchement manuel possible depuis l'API/admin web si active dans l'interface.
-
-Commandes utiles :
-
-```bash
-docker logs snde-celery-worker --tail 200
-docker logs snde-celery-beat --tail 200
+```text
+backend/gnn_models/ft_transformer_snde.pt
 ```
 
-## Mobile terrain
+Le code d'inference est ici :
 
-Le backend gere les routes terrain suivantes :
+```text
+backend/apps/scoring/ft_transformer.py
+```
 
-- affectations du releveur/agent terrain
-- clients en code relance `1`
-- saisie retour terrain
-- photo compteur stockee dans MinIO
-- latitude/longitude de preuve de passage
-- statut de visite : a faire, fait, absent, inaccessible, anomalie
+Le modele utilise les features client/FAB et les champs historiques si disponibles. Les probabilites sont exposees dans :
 
-## Commandes utiles
+```text
+clients.proba_paiement
+clients.score_final
+```
 
-Verifier Django :
+## Restauration De La Base Complete
+
+Le dump complet est fourni hors Git :
+
+```text
+snde_full_backup.dump
+```
+
+Copier le dump sur le serveur, dans le dossier du repo ou ailleurs.
+
+Si PostgreSQL tourne dans Docker Compose :
 
 ```bash
+docker cp snde_full_backup.dump snde-postgres:/tmp/snde_full_backup.dump
+docker exec snde-postgres pg_restore -U snde -d snde --clean --if-exists /tmp/snde_full_backup.dump
+```
+
+Si la base cible est vide mais existe deja, cette commande restaure les tables/donnees.
+
+Verifier apres restauration :
+
+```bash
+docker exec snde-postgres psql -U snde -d snde -c "select count(*) from clients;"
+docker exec snde-postgres psql -U snde -d snde -c "select count(*) from fab_imports;"
+docker exec snde-postgres psql -U snde -d snde -c "select count(*) from terrain_assignments;"
+```
+
+Nettoyer le dump temporaire dans le conteneur :
+
+```bash
+docker exec snde-postgres rm -f /tmp/snde_full_backup.dump
+```
+
+## Alternative Sans Dump : Reconstruire Depuis S3
+
+Si DevOps ne veut pas restaurer le dump complet, il faut configurer AWS S3 dans `.env`, puis lancer :
+
+```bash
+docker exec snde-backend python manage.py s3_backfill
+```
+
+Cette option reconstruit les imports depuis S3. Elle peut prendre du temps selon le volume historique.
+
+## Migrations
+
+Au demarrage, le service `backend` execute :
+
+```bash
+python manage.py migrate --noinput
+python manage.py create_default_admin
+```
+
+Execution manuelle si necessaire :
+
+```bash
+docker exec snde-backend python manage.py migrate
 docker exec snde-backend python manage.py check
 ```
 
-Lister les migrations :
+## Synchronisation S3 Automatique
 
-```bash
-docker exec snde-backend python manage.py showmigrations
+Celery Beat lance la tache :
+
+```text
+scoring.sync_s3_daily
 ```
 
-Ouvrir un shell Django :
+Planification :
+
+```text
+tous les jours a 02:00 Africa/Nouakchott
+```
+
+Logs :
+
+```bash
+docker logs snde-celery-beat --tail 200
+docker logs snde-celery-worker --tail 200
+```
+
+## Commandes Utiles
+
+Statut :
+
+```bash
+docker compose ps
+```
+
+Logs backend :
+
+```bash
+docker logs snde-backend --tail 200
+```
+
+Logs worker :
+
+```bash
+docker logs snde-celery-worker --tail 200
+```
+
+Shell Django :
 
 ```bash
 docker exec -it snde-backend python manage.py shell
 ```
 
-## Livraison
+Verifier l'API :
 
-Ce depot ne contient pas :
+```bash
+curl http://localhost:8000/api/
+```
 
-- le vrai `.env`
-- les secrets AWS
-- les fichiers Apple `.p8`
-- les datasets d'entrainement
-- les logs locaux
-- le frontend web
-- l'application mobile
+Verifier la base :
 
-Ces elements doivent etre livres ou configures separement selon la politique DevOps SNDE.
+```bash
+docker exec snde-postgres psql -U snde -d snde -c "select pg_size_pretty(pg_database_size('snde'));"
+```
+
+## Mobile / TestFlight
+
+Une fois le backend deploye, fournir a l'equipe mobile l'URL publique API :
+
+```text
+https://DOMAIN/api
+```
+
+Cette URL sera mise dans `mobile/app.json` :
+
+```json
+"apiUrl": "https://DOMAIN/api"
+```
+
+Sans URL publique accessible depuis Internet, l'app TestFlight ne pourra pas fonctionner depuis la maison du directeur.
+
+## Checklist DevOps
+
+1. Cloner le repo.
+2. Creer `.env` depuis `.env.example`.
+3. Renseigner secrets Django/Postgres/Redis/MinIO/AWS.
+4. Lancer `docker compose up -d --build`.
+5. Restaurer `snde_full_backup.dump` ou reconstruire depuis S3.
+6. Verifier `docker compose ps`.
+7. Verifier `python manage.py check`.
+8. Verifier les counts PostgreSQL (`clients`, `fab_imports`, `terrain_assignments`).
+9. Exposer le backend en HTTPS.
+10. Donner l'URL finale `/api` a l'equipe mobile.
+
+## Points De Securite
+
+- Ne pas pousser `.env`.
+- Ne pas pousser `snde_full_backup.dump`.
+- Ne pas exposer PostgreSQL publiquement sauf necessite et restrictions IP.
+- Mettre `DJANGO_DEBUG=0` en production.
+- Utiliser HTTPS devant le backend.
+- Utiliser des credentials AWS read-only pour la source FAB.
+- Sauvegarder PostgreSQL en production.
